@@ -1,0 +1,3 @@
+flex -o temp.c BOSSTEQ.l
+g++ temp.c -lfl -o BOSSTEQ.out 
+rm temp.c 
