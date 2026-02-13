@@ -15,25 +15,41 @@ cd /home/aaniksahaa/phylogeny/steq/STEQ
 # 2) Optimized method
 ./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_optimized.tre --nqd-method optimized
 
-# 3) Optimized + validation (compare baseline vs optimized internally)
+# 3) Optimized-all-LCA method (precomputes all leaf-pair LCAs)
+./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_optimized_all_lca.tre --nqd-method optimized_all_lca
+
+# 4) Optimized + validation (compare baseline vs optimized variants internally)
 ./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_validate.tre --nqd-method optimized --validate-nqd --validate-pairs 20000
 
-# 4) Optimized + benchmark
+# 5) Optimized + benchmark (reports baseline, optimized, and optimized_all_lca)
 ./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_bench.tre --nqd-method optimized --benchmark-nqd
 
-# 5) Optimized + validation + benchmark together
+# 6) Optimized-all-LCA + validation + benchmark together
+./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_all_lca_fullcheck.tre --nqd-method optimized_all_lca --validate-nqd --validate-pairs 20000 --benchmark-nqd
+
+# 7) Optimized + validation + benchmark together
 ./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_fullcheck.tre --nqd-method optimized --validate-nqd --validate-pairs 20000 --benchmark-nqd
 
-# 6) Example with different central tendency and FastME mode
+# 8) Example with different central tendency and FastME mode
 ./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree_median_nj.tre -c 1 -f 1 --nqd-method optimized --validate-nqd
 
-# 7) Show all options
+# 9) Show all options
 ./run_steq.sh --help
 
 
 
 
 ./run_steq.sh -i all_gt_bs_rooted_200.tre -o output_tree_fullcheck.tre --nqd-method optimized --validate-nqd --validate-pairs 20000 --benchmark-nqd
+
+
+
+./run_steq.sh -i all_gt_1k_100.tre -o output_tree_all_lca_fullcheck_1k.tre --nqd-method optimized_all_lca --validate-nqd --validate-pairs 20000 --benchmark-nqd
+
+
+./run_steq.sh -i 1kp_gt.tre -o output_tree_all_lca_fullcheck_1kp.tre --nqd-method optimized_all_lca --validate-nqd --validate-pairs 20000 --benchmark-nqd
+
+
+./run_steq.sh -i 1kp-og-rhodophyta.tre -o output_tree_all_lca_fullcheck_1kp.tre --nqd-method optimized_all_lca --validate-nqd --validate-pairs 20000 --benchmark-nqd
 
 
 
@@ -57,11 +73,17 @@ chmod +x ../Binaries/BIONJ
 # 2) Optimized
 ./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix_optimized.txt ../output_tree_optimized_direct.tre 0 --nqd_method optimized
 
-# 3) Optimized + validation
+# 3) Optimized-all-LCA
+./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix_optimized_all_lca.txt ../output_tree_optimized_all_lca_direct.tre 0 --nqd_method optimized_all_lca
+
+# 4) Optimized + validation
 ./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix_validate.txt ../output_tree_validate_direct.tre 0 --nqd_method optimized --validate_nqd --validate_pairs 20000
 
-# 4) Optimized + benchmark
+# 5) Optimized + benchmark
 ./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix_bench.txt ../output_tree_bench_direct.tre 0 --nqd_method optimized --benchmark_nqd
 
-# 5) Full check
+# 6) Optimized-all-LCA full check
+./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix_all_lca_full.txt ../output_tree_all_lca_full_direct.tre 0 --nqd_method optimized_all_lca --validate_nqd --validate_pairs 20000 --benchmark_nqd
+
+# 7) Full check
 ./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix_full.txt ../output_tree_full_direct.tre 0 --nqd_method optimized --validate_nqd --validate_pairs 20000 --benchmark_nqd

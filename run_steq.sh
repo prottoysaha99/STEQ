@@ -78,12 +78,13 @@ Options:
   --nqd-method           NQD query strategy (default: baseline)
                            baseline  = original path traversal
                            optimized = preprocessed LCA/prefix-sum method
+                           optimized_all_lca = optimized + all leaf-pair LCA table
 
   --validate-nqd         Compare baseline vs optimized NQD values/matrix and
-                         stop on mismatch
+                         stop on mismatch (includes optimized_all_lca checks)
 
   --benchmark-nqd        Run baseline and optimized timing benchmark before
-                         final tree inference
+                         final tree inference (reports optimized_all_lca too)
 
   --validate-pairs N     Number of random per-tree pairs used in validation
                          when full-pair check is expensive (default: 20000)
@@ -167,8 +168,8 @@ if [[ "$FASTME_TYPE" != [0-2] ]]; then
     exit 1
 fi
 
-if [[ "$NQD_METHOD" != "baseline" && "$NQD_METHOD" != "optimized" ]]; then
-    log_err "--nqd-method must be baseline or optimized (got '$NQD_METHOD')."
+if [[ "$NQD_METHOD" != "baseline" && "$NQD_METHOD" != "optimized" && "$NQD_METHOD" != "optimized_all_lca" ]]; then
+    log_err "--nqd-method must be baseline, optimized, or optimized_all_lca (got '$NQD_METHOD')."
     exit 1
 fi
 

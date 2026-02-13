@@ -96,12 +96,14 @@ void compareTreeAllPairs(GeneTree &gt) {
         for (int j = i; j < (int)taxa.size(); j++) {
             double b = gt.findDistBaseline(taxa[i], taxa[j]);
             double o = gt.findDistOptimized(taxa[i], taxa[j]);
+            double a = gt.findDistOptimizedAllLCA(taxa[i], taxa[j]);
             assertClose(b, o, "tree pair " + taxa[i] + "," + taxa[j]);
+            assertClose(b, a, "tree pair(all_lca) " + taxa[i] + "," + taxa[j]);
         }
     }
 }
 
-vector<vector<double> > aggregateMatrix(vector<GeneTree> &trees, const vector<string> &allTaxa, bool optimized) {
+vector<vector<double> > aggregateMatrix(vector<GeneTree> &trees, const vector<string> &allTaxa, int mode) {
     int n = (int)allTaxa.size();
     vector<vector<double> > matrix(n, vector<double>(n, 0.0));
 
@@ -111,8 +113,9 @@ vector<vector<double> > aggregateMatrix(vector<GeneTree> &trees, const vector<st
             int cnt = 0;
             for (int t = 0; t < (int)trees.size(); t++) {
                 if (!trees[t].isPresent(allTaxa[i], allTaxa[j])) continue;
-                double d = optimized ? trees[t].findDistOptimized(allTaxa[i], allTaxa[j])
-                                     : trees[t].findDistBaseline(allTaxa[i], allTaxa[j]);
+                double d = trees[t].findDistBaseline(allTaxa[i], allTaxa[j]);
+                if (mode == 1) d = trees[t].findDistOptimized(allTaxa[i], allTaxa[j]);
+                else if (mode == 2) d = trees[t].findDistOptimizedAllLCA(allTaxa[i], allTaxa[j]);
                 sum += d;
                 cnt++;
             }
@@ -180,9 +183,11 @@ void testMissingTaxaAggregation() {
     trees.push_back(buildGeneTreeFromLabels(l2, rng));
     trees.push_back(buildGeneTreeFromLabels(l3, rng));
 
-    vector<vector<double> > baseline = aggregateMatrix(trees, allTaxa, false);
-    vector<vector<double> > optimized = aggregateMatrix(trees, allTaxa, true);
+    vector<vector<double> > baseline = aggregateMatrix(trees, allTaxa, 0);
+    vector<vector<double> > optimized = aggregateMatrix(trees, allTaxa, 1);
+    vector<vector<double> > optimizedAllLCA = aggregateMatrix(trees, allTaxa, 2);
     compareMatrices(baseline, optimized);
+    compareMatrices(baseline, optimizedAllLCA);
 }
 
 int main() {

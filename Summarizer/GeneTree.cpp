@@ -47,6 +47,10 @@ class GeneTree{
     vector<int> firstOccurrence;
     vector<int> lg2;
     vector<vector<int> > rmq;
+    bool allLeafPairLCAPreprocessed;
+    vector<int> leafNodeIds;
+    vector<int> leafIndexByNode;
+    vector<int> lcaLeafTable;
 
     public:
     
@@ -55,6 +59,7 @@ class GeneTree{
         taxaMap = tNum;
         leafCnt = leafcnt;
         optimizedPreprocessed = false;
+        allLeafPairLCAPreprocessed = false;
         rootId = 0;
 
         for (int i = 1; i < tree.size(); i++) {
@@ -274,6 +279,65 @@ class GeneTree{
         return 0.5 * (double)(sumCx + sumCy - 2LL * internalCount);
     }
 
+    void preprocessAllLeafPairLCA() {
+        preprocessOptimized();
+        if (allLeafPairLCAPreprocessed) return;
+
+        int nodeCount = (int)tree.size();
+        leafIndexByNode.assign(nodeCount, -1);
+        leafNodeIds.clear();
+        leafNodeIds.reserve(leafCnt);
+
+        for (int i = 0; i < nodeCount; i++) {
+            if (children[i].empty()) {
+                leafIndexByNode[i] = (int)leafNodeIds.size();
+                leafNodeIds.push_back(i);
+            }
+        }
+
+        int nLeaves = (int)leafNodeIds.size();
+        lcaLeafTable.assign(nLeaves * nLeaves, rootId);
+
+        for (int i = 0; i < nLeaves; i++) {
+            int xi = leafNodeIds[i];
+            for (int j = i; j < nLeaves; j++) {
+                int yj = leafNodeIds[j];
+                int w = lca(xi, yj);
+                lcaLeafTable[i * nLeaves + j] = w;
+                lcaLeafTable[j * nLeaves + i] = w;
+            }
+        }
+
+        allLeafPairLCAPreprocessed = true;
+    }
+
+    double findDistOptimizedAllLCA(string taxa1, string taxa2){
+        if (taxa1 == taxa2) return 0.0;
+        preprocessAllLeafPairLCA();
+
+        int x = taxaMap[taxa1];
+        int y = taxaMap[taxa2];
+        int ix = leafIndexByNode[x];
+        int iy = leafIndexByNode[y];
+
+        int nLeaves = (int)leafNodeIds.size();
+        int w = lcaLeafTable[ix * nLeaves + iy];
+
+        int parentX = tree[x].parentId;
+        int parentY = tree[y].parentId;
+
+        long long upToParentY = (parentY == -1) ? 0LL : upPrefix[parentY];
+        long long upToParentX = (parentX == -1) ? 0LL : upPrefix[parentX];
+
+        long long sumCx = (downPrefix[x] - downPrefix[w]) + (upToParentY - upPrefix[w]);
+        long long sumCy = (downPrefix[y] - downPrefix[w]) + (upToParentX - upPrefix[w]);
+
+        long long internalCount = (long long)depth[x] + depth[y] - 2LL * depth[w] - 1LL;
+        if (internalCount < 0) internalCount = 0;
+
+        return 0.5 * (double)(sumCx + sumCy - 2LL * internalCount);
+    }
+
     bool validateOptimized(int pairSampleLimit, unsigned int seed, double tolerance, double &worstDiff, string &worstPair) {
         vector<string> taxa;
         taxa.reserve(taxaMap.size());
@@ -332,6 +396,64 @@ class GeneTree{
         return true;
     }
 
+    bool validateOptimizedAllLCA(int pairSampleLimit, unsigned int seed, double tolerance, double &worstDiff, string &worstPair) {
+        vector<string> taxa;
+        taxa.reserve(taxaMap.size());
+        for (map<string, int>::const_iterator it = taxaMap.begin(); it != taxaMap.end(); ++it) {
+            if (it->second > 0) taxa.push_back(it->first);
+        }
+
+        int n = (int)taxa.size();
+        if (n < 2) return true;
+
+        long long totalPairs = 1LL * n * (n - 1) / 2;
+        bool checkAll = (pairSampleLimit <= 0 || totalPairs <= pairSampleLimit);
+
+        worstDiff = 0.0;
+        worstPair.clear();
+        mt19937 rng(seed);
+
+        if (checkAll) {
+            for (int i = 0; i < n - 1; i++) {
+                for (int j = i + 1; j < n; j++) {
+                    double b = findDistBaseline(taxa[i], taxa[j]);
+                    double o = findDistOptimizedAllLCA(taxa[i], taxa[j]);
+                    double diff = fabs(b - o);
+                    if (diff > worstDiff) {
+                        worstDiff = diff;
+                        worstPair = taxa[i] + "," + taxa[j];
+                    }
+                    if (diff > tolerance) return false;
+                }
+            }
+            return true;
+        }
+
+        unordered_set<long long> sampled;
+        sampled.reserve(pairSampleLimit * 2);
+
+        while ((int)sampled.size() < pairSampleLimit) {
+            int i = rng() % n;
+            int j = rng() % n;
+            if (i == j) continue;
+            if (i > j) swap(i, j);
+            long long key = 1LL * i * n + j;
+            if (sampled.find(key) != sampled.end()) continue;
+            sampled.insert(key);
+
+            double b = findDistBaseline(taxa[i], taxa[j]);
+            double o = findDistOptimizedAllLCA(taxa[i], taxa[j]);
+            double diff = fabs(b - o);
+            if (diff > worstDiff) {
+                worstDiff = diff;
+                worstPair = taxa[i] + "," + taxa[j];
+            }
+            if (diff > tolerance) return false;
+        }
+
+        return true;
+    }
+
     size_t optimizedMemoryBytes() {
         preprocessOptimized();
 
@@ -349,6 +471,17 @@ class GeneTree{
         bytes += lg2.capacity() * sizeof(int);
         bytes += rmq.size() * sizeof(vector<int>);
         for (int i = 0; i < (int)rmq.size(); i++) bytes += rmq[i].capacity() * sizeof(int);
+
+        return bytes;
+    }
+
+    size_t allLeafPairLCAMemoryBytes() {
+        preprocessAllLeafPairLCA();
+
+        size_t bytes = optimizedMemoryBytes();
+        bytes += leafNodeIds.capacity() * sizeof(int);
+        bytes += leafIndexByNode.capacity() * sizeof(int);
+        bytes += lcaLeafTable.capacity() * sizeof(int);
 
         return bytes;
     }

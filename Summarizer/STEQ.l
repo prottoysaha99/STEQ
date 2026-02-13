@@ -23,7 +23,8 @@ bool isBinary;
 
 enum NQDMethod {
 	NQD_BASELINE = 0,
-	NQD_OPTIMIZED = 1
+	NQD_OPTIMIZED = 1,
+	NQD_OPTIMIZED_ALL_LCA = 2
 };
 
 NQDMethod nqdMethod = NQD_BASELINE;
@@ -71,6 +72,9 @@ bool PopulateDistanceMatrix(double **matrix, int type, NQDMethod method) {
 				if (geneTrees[treeNo].isPresent(taxalist[i],taxalist[j])) {
 					if (method == NQD_OPTIMIZED) {
 						distances.push_back(geneTrees[treeNo].findDistOptimized(taxalist[i],taxalist[j]));
+					}
+					else if (method == NQD_OPTIMIZED_ALL_LCA) {
+						distances.push_back(geneTrees[treeNo].findDistOptimizedAllLCA(taxalist[i],taxalist[j]));
 					}
 					else {
 						distances.push_back(geneTrees[treeNo].findDistBaseline(taxalist[i],taxalist[j]));
@@ -122,44 +126,72 @@ bool CompareMatrices(double **a, double **b, double tolerance, double &worstDiff
 
 bool ValidateMethods(int centralTendency) {
 	bool ok = true;
-	double globalWorst = 0.0;
-	string worstTreePair = "";
+	double globalWorstOptimized = 0.0;
+	double globalWorstAllLCA = 0.0;
+	string worstTreePairOptimized = "";
+	string worstTreePairAllLCA = "";
 
 	for (int treeNo = 0; treeNo < geneTreeCnt; treeNo++) {
-		double worst = 0.0;
-		string pair;
 		unsigned int seed = 1337 + treeNo;
-		bool treeOk = geneTrees[treeNo].validateOptimized(validatePairs, seed, validateTolerance, worst, pair);
-		if (worst > globalWorst) {
-			globalWorst = worst;
-			worstTreePair = "tree=" + to_string(treeNo) + ", pair=(" + pair + ")";
+
+		double worstOpt = 0.0;
+		string pairOpt;
+		bool treeOkOpt = geneTrees[treeNo].validateOptimized(validatePairs, seed, validateTolerance, worstOpt, pairOpt);
+		if (worstOpt > globalWorstOptimized) {
+			globalWorstOptimized = worstOpt;
+			worstTreePairOptimized = "tree=" + to_string(treeNo) + ", pair=(" + pairOpt + ")";
 		}
-		if (!treeOk) {
+		if (!treeOkOpt) {
 			ok = false;
-			cout << "[NQD-VALIDATION] mismatch in " << worstTreePair << ", diff=" << setprecision(15) << globalWorst << endl;
+			cout << "[NQD-VALIDATION] optimized mismatch in " << worstTreePairOptimized << ", diff=" << setprecision(15) << globalWorstOptimized << endl;
+			break;
+		}
+
+		double worstAll = 0.0;
+		string pairAll;
+		bool treeOkAll = geneTrees[treeNo].validateOptimizedAllLCA(validatePairs, seed, validateTolerance, worstAll, pairAll);
+		if (worstAll > globalWorstAllLCA) {
+			globalWorstAllLCA = worstAll;
+			worstTreePairAllLCA = "tree=" + to_string(treeNo) + ", pair=(" + pairAll + ")";
+		}
+		if (!treeOkAll) {
+			ok = false;
+			cout << "[NQD-VALIDATION] optimized_all_lca mismatch in " << worstTreePairAllLCA << ", diff=" << setprecision(15) << globalWorstAllLCA << endl;
 			break;
 		}
 	}
 
 	double **baseline = AllocateMatrix();
 	double **optimized = AllocateMatrix();
+	double **optimizedAllLCA = AllocateMatrix();
 	PopulateDistanceMatrix(baseline, centralTendency, NQD_BASELINE);
 	PopulateDistanceMatrix(optimized, centralTendency, NQD_OPTIMIZED);
+	PopulateDistanceMatrix(optimizedAllLCA, centralTendency, NQD_OPTIMIZED_ALL_LCA);
 
-	double matrixWorst = 0.0;
-	string matrixCell;
-	bool matrixOk = CompareMatrices(baseline, optimized, validateTolerance, matrixWorst, matrixCell);
+	double matrixWorstOpt = 0.0;
+	string matrixCellOpt;
+	bool matrixOkOpt = CompareMatrices(baseline, optimized, validateTolerance, matrixWorstOpt, matrixCellOpt);
+
+	double matrixWorstAll = 0.0;
+	string matrixCellAll;
+	bool matrixOkAll = CompareMatrices(baseline, optimizedAllLCA, validateTolerance, matrixWorstAll, matrixCellAll);
 
 	deallocate(baseline);
 	deallocate(optimized);
+	deallocate(optimizedAllLCA);
 
-	if (!matrixOk) {
+	if (!matrixOkOpt) {
 		ok = false;
-		cout << "[NQD-VALIDATION] matrix mismatch at (" << matrixCell << "), diff=" << setprecision(15) << matrixWorst << endl;
+		cout << "[NQD-VALIDATION] optimized matrix mismatch at (" << matrixCellOpt << "), diff=" << setprecision(15) << matrixWorstOpt << endl;
+	}
+	if (!matrixOkAll) {
+		ok = false;
+		cout << "[NQD-VALIDATION] optimized_all_lca matrix mismatch at (" << matrixCellAll << "), diff=" << setprecision(15) << matrixWorstAll << endl;
 	}
 
 	if (ok) {
-		cout << "[NQD-VALIDATION] passed, worst tree-level diff=" << setprecision(15) << globalWorst << endl;
+		cout << "[NQD-VALIDATION] passed, worst optimized diff=" << setprecision(15) << globalWorstOptimized
+			 << ", worst optimized_all_lca diff=" << setprecision(15) << globalWorstAllLCA << endl;
 	}
 
 	return ok;
@@ -175,10 +207,10 @@ void BenchmarkMethods(int centralTendency) {
 	auto t2 = high_resolution_clock::now();
 
 	auto prepStart = high_resolution_clock::now();
-	size_t memoryBytes = 0;
+	size_t memoryBytesOptimized = 0;
 	for (int treeNo = 0; treeNo < geneTreeCnt; treeNo++) {
 		geneTrees[treeNo].preprocessOptimized();
-		memoryBytes += geneTrees[treeNo].optimizedMemoryBytes();
+		memoryBytesOptimized += geneTrees[treeNo].optimizedMemoryBytes();
 	}
 	auto prepEnd = high_resolution_clock::now();
 
@@ -187,34 +219,67 @@ void BenchmarkMethods(int centralTendency) {
 	bool completeOptimized = PopulateDistanceMatrix(optimized, centralTendency, NQD_OPTIMIZED);
 	auto t4 = high_resolution_clock::now();
 
-	double matrixWorst = 0.0;
-	string matrixCell;
-	bool matrixOk = CompareMatrices(baseline, optimized, validateTolerance, matrixWorst, matrixCell);
+	auto prepAllStart = high_resolution_clock::now();
+	size_t memoryBytesAllLCA = 0;
+	for (int treeNo = 0; treeNo < geneTreeCnt; treeNo++) {
+		geneTrees[treeNo].preprocessAllLeafPairLCA();
+		memoryBytesAllLCA += geneTrees[treeNo].allLeafPairLCAMemoryBytes();
+	}
+	auto prepAllEnd = high_resolution_clock::now();
+
+	double **optimizedAllLCA = AllocateMatrix();
+	auto t5 = high_resolution_clock::now();
+	bool completeOptimizedAllLCA = PopulateDistanceMatrix(optimizedAllLCA, centralTendency, NQD_OPTIMIZED_ALL_LCA);
+	auto t6 = high_resolution_clock::now();
+
+	double matrixWorstOpt = 0.0;
+	string matrixCellOpt;
+	bool matrixOkOpt = CompareMatrices(baseline, optimized, validateTolerance, matrixWorstOpt, matrixCellOpt);
+
+	double matrixWorstAll = 0.0;
+	string matrixCellAll;
+	bool matrixOkAll = CompareMatrices(baseline, optimizedAllLCA, validateTolerance, matrixWorstAll, matrixCellAll);
 
 	deallocate(baseline);
 	deallocate(optimized);
+	deallocate(optimizedAllLCA);
 
 	double allocBaselineMs = duration<double, milli>(t1 - t0).count();
 	double fillBaselineMs = duration<double, milli>(t2 - t1).count();
 	double prepMs = duration<double, milli>(prepEnd - prepStart).count();
 	double allocOptimizedMs = duration<double, milli>(t3 - prepEnd).count();
 	double fillOptimizedMs = duration<double, milli>(t4 - t3).count();
+	double prepAllLCAMs = duration<double, milli>(prepAllEnd - prepAllStart).count();
+	double allocOptimizedAllLCAMs = duration<double, milli>(t5 - prepAllEnd).count();
+	double fillOptimizedAllLCAMs = duration<double, milli>(t6 - t5).count();
 
 	double totalBaselineMs = allocBaselineMs + fillBaselineMs;
 	double totalOptimizedMs = prepMs + allocOptimizedMs + fillOptimizedMs;
-	double ratio = (totalOptimizedMs > 0.0) ? (totalBaselineMs / totalOptimizedMs) : 0.0;
+	double totalOptimizedAllLCAMs = prepAllLCAMs + allocOptimizedAllLCAMs + fillOptimizedAllLCAMs;
+	double ratioOptimized = (totalOptimizedMs > 0.0) ? (totalBaselineMs / totalOptimizedMs) : 0.0;
+	double ratioOptimizedAllLCA = (totalOptimizedAllLCAMs > 0.0) ? (totalBaselineMs / totalOptimizedAllLCAMs) : 0.0;
 
 	cout << "[NQD-BENCHMARK]" << endl;
 	cout << "  baseline_fill_ms         : " << fillBaselineMs << endl;
+	cout << "  baseline_total_ms        : " << totalBaselineMs << endl;
+	cout << "  optimized (RMQ LCA):" << endl;
 	cout << "  optimized_preprocess_ms  : " << prepMs << endl;
 	cout << "  optimized_fill_ms        : " << fillOptimizedMs << endl;
-	cout << "  baseline_total_ms        : " << totalBaselineMs << endl;
 	cout << "  optimized_total_ms       : " << totalOptimizedMs << endl;
-	cout << "  speedup                  : " << ratio << endl;
-	cout << "  optimized_memory_bytes~  : " << memoryBytes << endl;
+	cout << "  optimized_speedup        : " << ratioOptimized << endl;
+	cout << "  optimized_memory_bytes~  : " << memoryBytesOptimized << endl;
+	cout << "  optimized_all_lca:" << endl;
+	cout << "  all_lca_precompute_ms    : " << prepAllLCAMs << endl;
+	cout << "  all_lca_fill_ms          : " << fillOptimizedAllLCAMs << endl;
+	cout << "  all_lca_total_ms         : " << totalOptimizedAllLCAMs << endl;
+	cout << "  all_lca_speedup          : " << ratioOptimizedAllLCA << endl;
+	cout << "  all_lca_memory_bytes~    : " << memoryBytesAllLCA << endl;
 
-	if (!matrixOk || completeBaseline != completeOptimized) {
-		cout << "[NQD-BENCHMARK] warning: result mismatch at (" << matrixCell << "), diff=" << setprecision(15) << matrixWorst << endl;
+	if (!matrixOkOpt || completeBaseline != completeOptimized) {
+		cout << "[NQD-BENCHMARK] warning: optimized mismatch at (" << matrixCellOpt << "), diff=" << setprecision(15) << matrixWorstOpt << endl;
+	}
+	if (!matrixOkAll || completeBaseline != completeOptimizedAllLCA) {
+		cout << "[NQD-BENCHMARK] warning: optimized_all_lca mismatch at (" << matrixCellAll << "), diff=" << setprecision(15) << matrixWorstAll << endl;
 	}
 }
 
@@ -229,12 +294,13 @@ bool ParseOptionalArgs(int argc, char *argv[]) {
 		}
 		else if (arg == "--nqd_method") {
 			if (i + 1 >= argc) {
-				cout << "Missing value for --nqd_method (baseline|optimized)" << endl;
+				cout << "Missing value for --nqd_method (baseline|optimized|optimized_all_lca)" << endl;
 				return false;
 			}
 			string method = argv[++i];
 			if (method == "baseline") nqdMethod = NQD_BASELINE;
 			else if (method == "optimized") nqdMethod = NQD_OPTIMIZED;
+			else if (method == "optimized_all_lca") nqdMethod = NQD_OPTIMIZED_ALL_LCA;
 			else {
 				cout << "Invalid --nqd_method value: " << method << endl;
 				return false;
@@ -410,7 +476,7 @@ int main(int argc,char *argv[]){
 		argv[5] = fastme method; 0: fastme_BAL, 1: fastme_NJ, 2: fastme_UNJ
 	*/
 	if(argc < 6){
-		printf("Usage: STEQ.out <input> <central_tendency> <output_matrix> <output_tree> <fastme_method> [--nqd_method baseline|optimized] [--validate_nqd] [--benchmark_nqd] [--validate_pairs N]\n");
+		printf("Usage: STEQ.out <input> <central_tendency> <output_matrix> <output_tree> <fastme_method> [--nqd_method baseline|optimized|optimized_all_lca] [--validate_nqd] [--benchmark_nqd] [--validate_pairs N]\n");
 		return 0;
 	} 
 
