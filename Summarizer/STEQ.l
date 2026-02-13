@@ -204,14 +204,14 @@ void BenchmarkMethods(int centralTendency) {
 	double totalOptimizedMs = prepMs + allocOptimizedMs + fillOptimizedMs;
 	double ratio = (totalOptimizedMs > 0.0) ? (totalBaselineMs / totalOptimizedMs) : 0.0;
 
-	cout << "[NQD-BENCHMARK] baseline_fill_ms=" << fillBaselineMs
-		 << ", optimized_preprocess_ms=" << prepMs
-		 << ", optimized_fill_ms=" << fillOptimizedMs
-		 << ", baseline_total_ms=" << totalBaselineMs
-		 << ", optimized_total_ms=" << totalOptimizedMs
-		 << ", speedup=" << ratio
-		 << ", optimized_memory_bytes~=" << memoryBytes
-		 << endl;
+	cout << "[NQD-BENCHMARK]" << endl;
+	cout << "  baseline_fill_ms         : " << fillBaselineMs << endl;
+	cout << "  optimized_preprocess_ms  : " << prepMs << endl;
+	cout << "  optimized_fill_ms        : " << fillOptimizedMs << endl;
+	cout << "  baseline_total_ms        : " << totalBaselineMs << endl;
+	cout << "  optimized_total_ms       : " << totalOptimizedMs << endl;
+	cout << "  speedup                  : " << ratio << endl;
+	cout << "  optimized_memory_bytes~  : " << memoryBytes << endl;
 
 	if (!matrixOk || completeBaseline != completeOptimized) {
 		cout << "[NQD-BENCHMARK] warning: result mismatch at (" << matrixCell << "), diff=" << setprecision(15) << matrixWorst << endl;

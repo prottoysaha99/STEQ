@@ -23,6 +23,28 @@ VALIDATE_NQD=false
 BENCHMARK_NQD=false
 VALIDATE_PAIRS=20000
 
+# ── Colors (TTY only, can disable with NO_COLOR=1) ──────────────────────────
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    C_RESET=$'\033[0m'
+    C_BOLD=$'\033[1m'
+    C_BLUE=$'\033[34m'
+    C_GREEN=$'\033[32m'
+    C_YELLOW=$'\033[33m'
+    C_RED=$'\033[31m'
+else
+    C_RESET=""
+    C_BOLD=""
+    C_BLUE=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_RED=""
+fi
+
+log_info() { echo "${C_BLUE}[STEQ]${C_RESET} $*"; }
+log_ok() { echo "${C_GREEN}[STEQ]${C_RESET} $*"; }
+log_warn() { echo "${C_YELLOW}[STEQ]${C_RESET} $*" >&2; }
+log_err() { echo "${C_RED}Error:${C_RESET} $*" >&2; }
+
 # ── Usage / Help ──────────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
@@ -113,7 +135,7 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage 0 ;;
         *)
-            echo "Error: Unknown option '$1'" >&2
+            log_err "Unknown option '$1'"
             echo "Run '$(basename "$0") --help' for usage." >&2
             exit 1 ;;
     esac
@@ -121,37 +143,37 @@ done
 
 # ── Validate Required Args ───────────────────────────────────────────────────
 if [[ -z "$INPUT" ]]; then
-    echo "Error: Input gene trees file is required (-i)." >&2
+    log_err "Input gene trees file is required (-i)."
     exit 1
 fi
 
 if [[ -z "$OUTPUT" ]]; then
-    echo "Error: Output species tree file is required (-o)." >&2
+    log_err "Output species tree file is required (-o)."
     exit 1
 fi
 
 if [[ ! -f "$INPUT" ]]; then
-    echo "Error: Input file '$INPUT' not found." >&2
+    log_err "Input file '$INPUT' not found."
     exit 1
 fi
 
 if [[ "$CENTRAL_TENDENCY" != [0-3] ]]; then
-    echo "Error: Central tendency must be 0, 1, 2, or 3 (got '$CENTRAL_TENDENCY')." >&2
+    log_err "Central tendency must be 0, 1, 2, or 3 (got '$CENTRAL_TENDENCY')."
     exit 1
 fi
 
 if [[ "$FASTME_TYPE" != [0-2] ]]; then
-    echo "Error: FastME type must be 0, 1, or 2 (got '$FASTME_TYPE')." >&2
+    log_err "FastME type must be 0, 1, or 2 (got '$FASTME_TYPE')."
     exit 1
 fi
 
 if [[ "$NQD_METHOD" != "baseline" && "$NQD_METHOD" != "optimized" ]]; then
-    echo "Error: --nqd-method must be baseline or optimized (got '$NQD_METHOD')." >&2
+    log_err "--nqd-method must be baseline or optimized (got '$NQD_METHOD')."
     exit 1
 fi
 
 if ! [[ "$VALIDATE_PAIRS" =~ ^[0-9]+$ ]]; then
-    echo "Error: --validate-pairs must be a non-negative integer (got '$VALIDATE_PAIRS')." >&2
+    log_err "--validate-pairs must be a non-negative integer (got '$VALIDATE_PAIRS')."
     exit 1
 fi
 
@@ -183,15 +205,15 @@ check_dep g++ g++
 
 # ── Build STEQ if needed ─────────────────────────────────────────────────────
 if [[ "$FORCE_REBUILD" == true ]] || [[ ! -x "$STEQ_EXEC" ]]; then
-    echo "[STEQ] Compiling STEQ.l ..."
+    log_info "Compiling STEQ.l ..."
     pushd "$SUMMARIZER_DIR" > /dev/null
     flex -o _steq_temp.c STEQ.l
     g++ _steq_temp.c -lfl -o STEQ.out
     rm -f _steq_temp.c
     popd > /dev/null
-    echo "[STEQ] Build complete: $STEQ_EXEC"
+    log_ok "Build complete: $STEQ_EXEC"
 else
-    echo "[STEQ] Using existing binary: $STEQ_EXEC"
+    log_info "Using existing binary: $STEQ_EXEC"
 fi
 
 # Ensure tree-inference binaries are executable
@@ -203,7 +225,7 @@ FM_LABELS=("FastME_BAL" "FastME_NJ" "FastME_UNJ")
 NUM_TREES="$(wc -l < "$INPUT")"
 
 echo ""
-echo "[STEQ] ─── Run Configuration ───"
+echo "${C_BOLD}${C_BLUE}[STEQ] ─── Run Configuration ───${C_RESET}"
 echo "  Input gene trees : $INPUT  ($NUM_TREES trees)"
 echo "  Central tendency : ${CT_LABELS[$CENTRAL_TENDENCY]} ($CENTRAL_TENDENCY)"
 echo "  Tree method      : ${FM_LABELS[$FASTME_TYPE]} ($FASTME_TYPE)"
@@ -214,7 +236,7 @@ echo "  Output tree      : $OUTPUT"
 echo ""
 
 # ── Run STEQ ─────────────────────────────────────────────────────────────────
-echo "[STEQ] Running ..."
+log_info "Running ..."
 
 # STEQ.out uses relative path ../Binaries/ so we must run from Summarizer/
 pushd "$SUMMARIZER_DIR" > /dev/null
@@ -241,12 +263,12 @@ popd > /dev/null
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 if [[ -f "$OUTPUT" ]]; then
-    echo "[STEQ] Done! Species tree written to: $OUTPUT"
+    log_ok "Done! Species tree written to: $OUTPUT"
     echo ""
-    echo "  Output tree (first 200 chars):"
+    echo "${C_BOLD}  Output tree (first 200 chars):${C_RESET}"
     echo "  $(head -c 200 "$OUTPUT")..."
     echo ""
 else
-    echo "[STEQ] Warning: Output tree file was not created. Check input file format." >&2
+    log_warn "Output tree file was not created. Check input file format."
     exit 1
 fi
