@@ -27,9 +27,7 @@ enum NQDMethod {
 	NQD_OPTIMIZED_ALL_LCA = 2
 };
 
-NQDMethod nqdMethod = NQD_BASELINE;
-bool validateNQD = false;
-bool benchmarkNQD = false;
+NQDMethod nqdMethod = NQD_OPTIMIZED_ALL_LCA;
 int validatePairs = 20000;
 double validateTolerance = 1e-12;
 
@@ -286,32 +284,19 @@ void BenchmarkMethods(int centralTendency) {
 bool ParseOptionalArgs(int argc, char *argv[]) {
 	for (int i = 6; i < argc; i++) {
 		string arg = argv[i];
-		if (arg == "--validate_nqd" || arg == "--debug_compare_methods") {
-			validateNQD = true;
-		}
-		else if (arg == "--benchmark_nqd") {
-			benchmarkNQD = true;
-		}
-		else if (arg == "--nqd_method") {
+		if (arg == "--dist-calc-method") {
 			if (i + 1 >= argc) {
-				cout << "Missing value for --nqd_method (baseline|optimized|optimized_all_lca)" << endl;
+				cout << "Missing value for --dist-calc-method (all-lca|rmq|path-traversal)" << endl;
 				return false;
 			}
 			string method = argv[++i];
-			if (method == "baseline") nqdMethod = NQD_BASELINE;
-			else if (method == "optimized") nqdMethod = NQD_OPTIMIZED;
-			else if (method == "optimized_all_lca") nqdMethod = NQD_OPTIMIZED_ALL_LCA;
+			if (method == "path-traversal") nqdMethod = NQD_BASELINE;
+			else if (method == "rmq") nqdMethod = NQD_OPTIMIZED;
+			else if (method == "all-lca") nqdMethod = NQD_OPTIMIZED_ALL_LCA;
 			else {
-				cout << "Invalid --nqd_method value: " << method << endl;
+				cout << "Invalid --dist-calc-method value: " << method << endl;
 				return false;
 			}
-		}
-		else if (arg == "--validate_pairs") {
-			if (i + 1 >= argc) {
-				cout << "Missing value for --validate_pairs" << endl;
-				return false;
-			}
-			validatePairs = atoi(argv[++i]);
 		}
 		else {
 			cout << "Unknown argument: " << arg << endl;
@@ -476,7 +461,7 @@ int main(int argc,char *argv[]){
 		argv[5] = fastme method; 0: fastme_BAL, 1: fastme_NJ, 2: fastme_UNJ
 	*/
 	if(argc < 6){
-		printf("Usage: STEQ.out <input> <central_tendency> <output_matrix> <output_tree> <fastme_method> [--nqd_method baseline|optimized|optimized_all_lca] [--validate_nqd] [--benchmark_nqd] [--validate_pairs N]\n");
+		printf("Usage: STEQ.out <input> <central_tendency> <output_matrix> <output_tree> <fastme_method> [--dist-calc-method all-lca|rmq|path-traversal]\n");
 		return 0;
 	} 
 
@@ -505,20 +490,6 @@ int main(int argc,char *argv[]){
 	// matrix to store distance between any pair of taxa
 	double** matrix = AllocateMatrix();
 
-	if (validateNQD) {
-		bool ok = ValidateMethods(type);
-		if (!ok) {
-			deallocate(matrix);
-			fclose(yyin);
-			token.close();
-			return 1;
-		}
-	}
-
-	if (benchmarkNQD) {
-		BenchmarkMethods(type);
-	}
-	
 	// populate the distance matrix where each entry represents the distance of two species and returns if the matrix is complete
 	bool isCompleteDistanceMatrix = PopulateDistanceMatrix(matrix, type, nqdMethod);
 	

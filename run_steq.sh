@@ -18,10 +18,7 @@ MATRIX=""
 CENTRAL_TENDENCY=0
 FASTME_TYPE=0
 FORCE_REBUILD=false
-NQD_METHOD="baseline"
-VALIDATE_NQD=false
-BENCHMARK_NQD=false
-VALIDATE_PAIRS=20000
+DIST_CALC_METHOD="all-lca"
 
 # ── Colors (TTY only, can disable with NO_COLOR=1) ──────────────────────────
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
@@ -75,19 +72,10 @@ Options:
                          (by default a temp file is used; note: the STEQ
                           binary deletes this file after tree inference)
 
-  --nqd-method           NQD query strategy (default: baseline)
-                           baseline  = original path traversal
-                           optimized = preprocessed LCA/prefix-sum method
-                           optimized_all_lca = optimized + all leaf-pair LCA table
-
-  --validate-nqd         Compare baseline vs optimized NQD values/matrix and
-                         stop on mismatch (includes optimized_all_lca checks)
-
-  --benchmark-nqd        Run baseline and optimized timing benchmark before
-                         final tree inference (reports optimized_all_lca too)
-
-  --validate-pairs N     Number of random per-tree pairs used in validation
-                         when full-pair check is expensive (default: 20000)
+  --dist-calc-method     Distance computation method (default: all-lca)
+                           all-lca        = precompute all leaf-pair LCAs
+                           rmq            = Euler-tour RMQ LCA
+                           path-traversal = original path traversal
 
   --rebuild               Force recompilation of STEQ even if binary exists
 
@@ -122,14 +110,8 @@ while [[ $# -gt 0 ]]; do
             FASTME_TYPE="$2"; shift 2 ;;
         -m|--matrix)
             MATRIX="$2"; shift 2 ;;
-        --nqd-method)
-            NQD_METHOD="$2"; shift 2 ;;
-        --validate-nqd)
-            VALIDATE_NQD=true; shift ;;
-        --benchmark-nqd)
-            BENCHMARK_NQD=true; shift ;;
-        --validate-pairs)
-            VALIDATE_PAIRS="$2"; shift 2 ;;
+        --dist-calc-method)
+            DIST_CALC_METHOD="$2"; shift 2 ;;
 
         --rebuild)
             FORCE_REBUILD=true; shift ;;
@@ -168,13 +150,8 @@ if [[ "$FASTME_TYPE" != [0-2] ]]; then
     exit 1
 fi
 
-if [[ "$NQD_METHOD" != "baseline" && "$NQD_METHOD" != "optimized" && "$NQD_METHOD" != "optimized_all_lca" ]]; then
-    log_err "--nqd-method must be baseline, optimized, or optimized_all_lca (got '$NQD_METHOD')."
-    exit 1
-fi
-
-if ! [[ "$VALIDATE_PAIRS" =~ ^[0-9]+$ ]]; then
-    log_err "--validate-pairs must be a non-negative integer (got '$VALIDATE_PAIRS')."
+if [[ "$DIST_CALC_METHOD" != "all-lca" && "$DIST_CALC_METHOD" != "rmq" && "$DIST_CALC_METHOD" != "path-traversal" ]]; then
+    log_err "--dist-calc-method must be all-lca, rmq, or path-traversal (got '$DIST_CALC_METHOD')."
     exit 1
 fi
 
@@ -230,9 +207,7 @@ echo "${C_BOLD}${C_BLUE}[STEQ] ─── Run Configuration ───${C_RESET}"
 echo "  Input gene trees : $INPUT  ($NUM_TREES trees)"
 echo "  Central tendency : ${CT_LABELS[$CENTRAL_TENDENCY]} ($CENTRAL_TENDENCY)"
 echo "  Tree method      : ${FM_LABELS[$FASTME_TYPE]} ($FASTME_TYPE)"
-echo "  NQD method       : $NQD_METHOD"
-echo "  Validate NQD     : $VALIDATE_NQD"
-echo "  Benchmark NQD    : $BENCHMARK_NQD"
+echo "  Dist calc method : $DIST_CALC_METHOD"
 echo "  Output tree      : $OUTPUT"
 echo ""
 
@@ -241,30 +216,25 @@ log_info "Running ..."
 
 # STEQ.out uses relative path ../Binaries/ so we must run from Summarizer/
 pushd "$SUMMARIZER_DIR" > /dev/null
+START_NS="$(date +%s%N)"
 STEQ_ARGS=(
   "$INPUT"
   "$CENTRAL_TENDENCY"
   "$MATRIX"
   "$OUTPUT"
   "$FASTME_TYPE"
-  "--nqd_method" "$NQD_METHOD"
-  "--validate_pairs" "$VALIDATE_PAIRS"
+  "--dist-calc-method" "$DIST_CALC_METHOD"
 )
 
-if [[ "$VALIDATE_NQD" == true ]]; then
-    STEQ_ARGS+=("--validate_nqd")
-fi
-
-if [[ "$BENCHMARK_NQD" == true ]]; then
-    STEQ_ARGS+=("--benchmark_nqd")
-fi
-
 ./STEQ.out "${STEQ_ARGS[@]}"
+END_NS="$(date +%s%N)"
 popd > /dev/null
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 if [[ -f "$OUTPUT" ]]; then
+    TOTAL_SEC="$(awk -v s="$START_NS" -v e="$END_NS" 'BEGIN { printf "%.3f", (e-s)/1000000000 }')"
     log_ok "Done! Species tree written to: $OUTPUT"
+    echo "  Total runtime    : ${TOTAL_SEC}s"
     echo ""
     echo "${C_BOLD}  Output tree (first 200 chars):${C_RESET}"
     echo "  $(head -c 200 "$OUTPUT")..."
