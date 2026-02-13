@@ -1,0 +1,77 @@
+
+
+
+
+./run_steq.sh -i <gene_trees> -o <species_tree> [OPTIONS]
+
+
+
+
+
+
+# ============================================================
+# Commands to run STEQ on a gene tree file
+# ============================================================
+# Recommended: use the wrapper script run_steq.sh (see below)
+# ============================================================
+
+# ── Quick Start (using run_steq.sh) ─────────────────────────
+# From the STEQ project root directory:
+
+./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree.tre
+
+# See all options:
+./run_steq.sh --help
+
+# More examples:
+./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree.tre -c 1 -f 1     # Median + NJ
+./run_steq.sh -i all_gt_bs_rooted_37.tre -o output_tree.tre --rebuild      # Force recompile
+
+# ── Manual Steps (if not using the wrapper) ──────────────────
+
+# Step 0: Install flex (only needed once, if not already installed)
+sudo apt-get install -y flex
+
+# Step 1: Navigate to the STEQ project root
+cd /home/aaniksahaa/phylogeny/steq/STEQ
+
+# Step 2: Compile STEQ.l into an executable
+#   - flex generates C code from the .l lexer file
+#   - g++ compiles it, linking the flex library (-lfl)
+cd Summarizer
+flex -o temp.c STEQ.l
+g++ temp.c -lfl -o STEQ.out
+rm temp.c
+
+# Step 3: Ensure the FastME binary is executable
+chmod +x ../Binaries/fastme-2.1.5-linux64
+chmod +x ../Binaries/BIONJ
+
+# Step 4: Run STEQ (from the Summarizer directory)
+# Usage:
+#   ./STEQ.out <input_file> <central_tendency> <output_matrix> <output_tree> <fastme_type>
+#
+# Arguments:
+#   <input_file>        - Path to the gene trees file (Newick format, one tree per line)
+#   <central_tendency>  - 0: Mean, 1: Median, 2: Mode, 3: Normal Distribution
+#   <output_matrix>     - Path for intermediate distance matrix (gets cleaned up after tree inference)
+#   <output_tree>       - Path for the output species tree
+#   <fastme_type>       - 0: FastME_BAL, 1: FastME_NJ, 2: FastME_UNJ
+#
+# Example: Run with Mean + FastME_BAL
+./STEQ.out ../all_gt_bs_rooted_37.tre 0 ../output_matrix.txt ../output_tree.tre 0
+
+# The output species tree will be written to: ../output_tree.tre
+
+# ============================================================
+# Other example runs (from Summarizer directory):
+# ============================================================
+
+# Using Median + FastME_NJ:
+# ./STEQ.out ../all_gt_bs_rooted_37.tre 1 ../output_matrix.txt ../output_tree_median_nj.tre 1
+
+# Using Mode + FastME_BAL:
+# ./STEQ.out ../all_gt_bs_rooted_37.tre 2 ../output_matrix.txt ../output_tree_mode_bal.tre 0
+
+# Using Normal Distribution + FastME_BAL:
+# ./STEQ.out ../all_gt_bs_rooted_37.tre 3 ../output_matrix.txt ../output_tree_nd_bal.tre 0
