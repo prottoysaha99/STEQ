@@ -18,6 +18,10 @@ MATRIX=""
 CENTRAL_TENDENCY=0
 FASTME_TYPE=0
 FORCE_REBUILD=false
+NQD_METHOD="baseline"
+VALIDATE_NQD=false
+BENCHMARK_NQD=false
+VALIDATE_PAIRS=20000
 
 # ── Usage / Help ──────────────────────────────────────────────────────────────
 usage() {
@@ -48,6 +52,19 @@ Options:
   -m, --matrix   FILE    Path for intermediate distance matrix file
                          (by default a temp file is used; note: the STEQ
                           binary deletes this file after tree inference)
+
+  --nqd-method           NQD query strategy (default: baseline)
+                           baseline  = original path traversal
+                           optimized = preprocessed LCA/prefix-sum method
+
+  --validate-nqd         Compare baseline vs optimized NQD values/matrix and
+                         stop on mismatch
+
+  --benchmark-nqd        Run baseline and optimized timing benchmark before
+                         final tree inference
+
+  --validate-pairs N     Number of random per-tree pairs used in validation
+                         when full-pair check is expensive (default: 20000)
 
   --rebuild               Force recompilation of STEQ even if binary exists
 
@@ -82,6 +99,14 @@ while [[ $# -gt 0 ]]; do
             FASTME_TYPE="$2"; shift 2 ;;
         -m|--matrix)
             MATRIX="$2"; shift 2 ;;
+        --nqd-method)
+            NQD_METHOD="$2"; shift 2 ;;
+        --validate-nqd)
+            VALIDATE_NQD=true; shift ;;
+        --benchmark-nqd)
+            BENCHMARK_NQD=true; shift ;;
+        --validate-pairs)
+            VALIDATE_PAIRS="$2"; shift 2 ;;
 
         --rebuild)
             FORCE_REBUILD=true; shift ;;
@@ -117,6 +142,16 @@ fi
 
 if [[ "$FASTME_TYPE" != [0-2] ]]; then
     echo "Error: FastME type must be 0, 1, or 2 (got '$FASTME_TYPE')." >&2
+    exit 1
+fi
+
+if [[ "$NQD_METHOD" != "baseline" && "$NQD_METHOD" != "optimized" ]]; then
+    echo "Error: --nqd-method must be baseline or optimized (got '$NQD_METHOD')." >&2
+    exit 1
+fi
+
+if ! [[ "$VALIDATE_PAIRS" =~ ^[0-9]+$ ]]; then
+    echo "Error: --validate-pairs must be a non-negative integer (got '$VALIDATE_PAIRS')." >&2
     exit 1
 fi
 
@@ -172,6 +207,9 @@ echo "[STEQ] ─── Run Configuration ───"
 echo "  Input gene trees : $INPUT  ($NUM_TREES trees)"
 echo "  Central tendency : ${CT_LABELS[$CENTRAL_TENDENCY]} ($CENTRAL_TENDENCY)"
 echo "  Tree method      : ${FM_LABELS[$FASTME_TYPE]} ($FASTME_TYPE)"
+echo "  NQD method       : $NQD_METHOD"
+echo "  Validate NQD     : $VALIDATE_NQD"
+echo "  Benchmark NQD    : $BENCHMARK_NQD"
 echo "  Output tree      : $OUTPUT"
 echo ""
 
@@ -180,7 +218,25 @@ echo "[STEQ] Running ..."
 
 # STEQ.out uses relative path ../Binaries/ so we must run from Summarizer/
 pushd "$SUMMARIZER_DIR" > /dev/null
-./STEQ.out "$INPUT" "$CENTRAL_TENDENCY" "$MATRIX" "$OUTPUT" "$FASTME_TYPE"
+STEQ_ARGS=(
+  "$INPUT"
+  "$CENTRAL_TENDENCY"
+  "$MATRIX"
+  "$OUTPUT"
+  "$FASTME_TYPE"
+  "--nqd_method" "$NQD_METHOD"
+  "--validate_pairs" "$VALIDATE_PAIRS"
+)
+
+if [[ "$VALIDATE_NQD" == true ]]; then
+    STEQ_ARGS+=("--validate_nqd")
+fi
+
+if [[ "$BENCHMARK_NQD" == true ]]; then
+    STEQ_ARGS+=("--benchmark_nqd")
+fi
+
+./STEQ.out "${STEQ_ARGS[@]}"
 popd > /dev/null
 
 # ── Done ──────────────────────────────────────────────────────────────────────

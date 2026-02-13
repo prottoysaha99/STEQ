@@ -21,6 +21,19 @@ int leafCnt = 0;
 double geneTreeCnt = 0.0;
 bool isBinary;
 
+enum NQDMethod {
+	NQD_BASELINE = 0,
+	NQD_OPTIMIZED = 1
+};
+
+NQDMethod nqdMethod = NQD_BASELINE;
+bool validateNQD = false;
+bool benchmarkNQD = false;
+int validatePairs = 20000;
+double validateTolerance = 1e-12;
+
+void deallocate(double **matrix);
+
 void Initialize_GeneTree() {
 	st.pop();
 	nodeId = -1;
@@ -47,7 +60,7 @@ double getDistance(vector <double> distance, int type) {
 	else return getFromND(distance, 2.0);
 }
 
-bool PopulateDistanceMatrix(double **matrix, int type) {
+bool PopulateDistanceMatrix(double **matrix, int type, NQDMethod method) {
 	int taxaSize = taxalist.size();
 	bool isCompleteDistanceMatrix = true;
 	
@@ -56,7 +69,12 @@ bool PopulateDistanceMatrix(double **matrix, int type) {
 			vector<double> distances;
 			for(int treeNo=0;treeNo<geneTreeCnt;treeNo++) {
 				if (geneTrees[treeNo].isPresent(taxalist[i],taxalist[j])) {
-					distances.push_back(geneTrees[treeNo].findDist(taxalist[i],taxalist[j]));
+					if (method == NQD_OPTIMIZED) {
+						distances.push_back(geneTrees[treeNo].findDistOptimized(taxalist[i],taxalist[j]));
+					}
+					else {
+						distances.push_back(geneTrees[treeNo].findDistBaseline(taxalist[i],taxalist[j]));
+					}
 				}
 			}
 
@@ -72,6 +90,170 @@ bool PopulateDistanceMatrix(double **matrix, int type) {
 	}
 
 	return isCompleteDistanceMatrix;
+}
+
+double** AllocateMatrix() {
+	int taxaSize = taxalist.size();
+	double** matrix = new double*[taxaSize];
+	for (int i = 0; i < taxaSize; i++) {
+		matrix[i] = new double[taxaSize];
+		for (int j = 0; j < taxaSize; j++) matrix[i][j] = 0.0;
+	}
+	return matrix;
+}
+
+bool CompareMatrices(double **a, double **b, double tolerance, double &worstDiff, string &worstCell) {
+	int taxaSize = taxalist.size();
+	worstDiff = 0.0;
+	worstCell.clear();
+
+	for (int i = 0; i < taxaSize; i++) {
+		for (int j = 0; j < taxaSize; j++) {
+			double diff = fabs(a[i][j] - b[i][j]);
+			if (diff > worstDiff) {
+				worstDiff = diff;
+				worstCell = taxalist[i] + "," + taxalist[j];
+			}
+			if (diff > tolerance) return false;
+		}
+	}
+	return true;
+}
+
+bool ValidateMethods(int centralTendency) {
+	bool ok = true;
+	double globalWorst = 0.0;
+	string worstTreePair = "";
+
+	for (int treeNo = 0; treeNo < geneTreeCnt; treeNo++) {
+		double worst = 0.0;
+		string pair;
+		unsigned int seed = 1337 + treeNo;
+		bool treeOk = geneTrees[treeNo].validateOptimized(validatePairs, seed, validateTolerance, worst, pair);
+		if (worst > globalWorst) {
+			globalWorst = worst;
+			worstTreePair = "tree=" + to_string(treeNo) + ", pair=(" + pair + ")";
+		}
+		if (!treeOk) {
+			ok = false;
+			cout << "[NQD-VALIDATION] mismatch in " << worstTreePair << ", diff=" << setprecision(15) << globalWorst << endl;
+			break;
+		}
+	}
+
+	double **baseline = AllocateMatrix();
+	double **optimized = AllocateMatrix();
+	PopulateDistanceMatrix(baseline, centralTendency, NQD_BASELINE);
+	PopulateDistanceMatrix(optimized, centralTendency, NQD_OPTIMIZED);
+
+	double matrixWorst = 0.0;
+	string matrixCell;
+	bool matrixOk = CompareMatrices(baseline, optimized, validateTolerance, matrixWorst, matrixCell);
+
+	deallocate(baseline);
+	deallocate(optimized);
+
+	if (!matrixOk) {
+		ok = false;
+		cout << "[NQD-VALIDATION] matrix mismatch at (" << matrixCell << "), diff=" << setprecision(15) << matrixWorst << endl;
+	}
+
+	if (ok) {
+		cout << "[NQD-VALIDATION] passed, worst tree-level diff=" << setprecision(15) << globalWorst << endl;
+	}
+
+	return ok;
+}
+
+void BenchmarkMethods(int centralTendency) {
+	using namespace chrono;
+
+	auto t0 = high_resolution_clock::now();
+	double **baseline = AllocateMatrix();
+	auto t1 = high_resolution_clock::now();
+	bool completeBaseline = PopulateDistanceMatrix(baseline, centralTendency, NQD_BASELINE);
+	auto t2 = high_resolution_clock::now();
+
+	auto prepStart = high_resolution_clock::now();
+	size_t memoryBytes = 0;
+	for (int treeNo = 0; treeNo < geneTreeCnt; treeNo++) {
+		geneTrees[treeNo].preprocessOptimized();
+		memoryBytes += geneTrees[treeNo].optimizedMemoryBytes();
+	}
+	auto prepEnd = high_resolution_clock::now();
+
+	double **optimized = AllocateMatrix();
+	auto t3 = high_resolution_clock::now();
+	bool completeOptimized = PopulateDistanceMatrix(optimized, centralTendency, NQD_OPTIMIZED);
+	auto t4 = high_resolution_clock::now();
+
+	double matrixWorst = 0.0;
+	string matrixCell;
+	bool matrixOk = CompareMatrices(baseline, optimized, validateTolerance, matrixWorst, matrixCell);
+
+	deallocate(baseline);
+	deallocate(optimized);
+
+	double allocBaselineMs = duration<double, milli>(t1 - t0).count();
+	double fillBaselineMs = duration<double, milli>(t2 - t1).count();
+	double prepMs = duration<double, milli>(prepEnd - prepStart).count();
+	double allocOptimizedMs = duration<double, milli>(t3 - prepEnd).count();
+	double fillOptimizedMs = duration<double, milli>(t4 - t3).count();
+
+	double totalBaselineMs = allocBaselineMs + fillBaselineMs;
+	double totalOptimizedMs = prepMs + allocOptimizedMs + fillOptimizedMs;
+	double ratio = (totalOptimizedMs > 0.0) ? (totalBaselineMs / totalOptimizedMs) : 0.0;
+
+	cout << "[NQD-BENCHMARK] baseline_fill_ms=" << fillBaselineMs
+		 << ", optimized_preprocess_ms=" << prepMs
+		 << ", optimized_fill_ms=" << fillOptimizedMs
+		 << ", baseline_total_ms=" << totalBaselineMs
+		 << ", optimized_total_ms=" << totalOptimizedMs
+		 << ", speedup=" << ratio
+		 << ", optimized_memory_bytes~=" << memoryBytes
+		 << endl;
+
+	if (!matrixOk || completeBaseline != completeOptimized) {
+		cout << "[NQD-BENCHMARK] warning: result mismatch at (" << matrixCell << "), diff=" << setprecision(15) << matrixWorst << endl;
+	}
+}
+
+bool ParseOptionalArgs(int argc, char *argv[]) {
+	for (int i = 6; i < argc; i++) {
+		string arg = argv[i];
+		if (arg == "--validate_nqd" || arg == "--debug_compare_methods") {
+			validateNQD = true;
+		}
+		else if (arg == "--benchmark_nqd") {
+			benchmarkNQD = true;
+		}
+		else if (arg == "--nqd_method") {
+			if (i + 1 >= argc) {
+				cout << "Missing value for --nqd_method (baseline|optimized)" << endl;
+				return false;
+			}
+			string method = argv[++i];
+			if (method == "baseline") nqdMethod = NQD_BASELINE;
+			else if (method == "optimized") nqdMethod = NQD_OPTIMIZED;
+			else {
+				cout << "Invalid --nqd_method value: " << method << endl;
+				return false;
+			}
+		}
+		else if (arg == "--validate_pairs") {
+			if (i + 1 >= argc) {
+				cout << "Missing value for --validate_pairs" << endl;
+				return false;
+			}
+			validatePairs = atoi(argv[++i]);
+		}
+		else {
+			cout << "Unknown argument: " << arg << endl;
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void write_to_File(double **matrix) {
@@ -227,10 +409,12 @@ int main(int argc,char *argv[]){
 		argv[4] = output tree file path
 		argv[5] = fastme method; 0: fastme_BAL, 1: fastme_NJ, 2: fastme_UNJ
 	*/
-	if(argc != 6){
-		printf("Please provide input file name and try again\n");
+	if(argc < 6){
+		printf("Usage: STEQ.out <input> <central_tendency> <output_matrix> <output_tree> <fastme_method> [--nqd_method baseline|optimized] [--validate_nqd] [--benchmark_nqd] [--validate_pairs N]\n");
 		return 0;
 	} 
+
+	if (!ParseOptionalArgs(argc, argv)) return 0;
 	
 	FILE *fin=fopen(argv[1],"r");
 
@@ -253,15 +437,24 @@ int main(int argc,char *argv[]){
 	int taxaSize = taxalist.size();
 
 	// matrix to store distance between any pair of taxa
-	double** matrix = new double*[taxaSize];
-	for(int i = 0; i < taxaSize; i++){
-		matrix[i] = new double[taxaSize];
+	double** matrix = AllocateMatrix();
 
-		for(int j = 0; j < taxaSize; j++) matrix[i][j] = 0.0;
+	if (validateNQD) {
+		bool ok = ValidateMethods(type);
+		if (!ok) {
+			deallocate(matrix);
+			fclose(yyin);
+			token.close();
+			return 1;
+		}
+	}
+
+	if (benchmarkNQD) {
+		BenchmarkMethods(type);
 	}
 	
 	// populate the distance matrix where each entry represents the distance of two species and returns if the matrix is complete
-	bool isCompleteDistanceMatrix = PopulateDistanceMatrix(matrix, type);
+	bool isCompleteDistanceMatrix = PopulateDistanceMatrix(matrix, type, nqdMethod);
 	
 	write_to_File(matrix);
 

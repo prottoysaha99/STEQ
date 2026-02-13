@@ -7,6 +7,11 @@
 ## To run this
 * cd STEQ
 * ./Summarizer/LexToOut
-* **./Summarizer/STEQ.out** (**input_file_path**) (**Central_Tendency_Type**) (**OutputMatrix_Path**) (**OutputTree_Path**) (**FASTME**)
+* **./Summarizer/STEQ.out** (**input_file_path**) (**Central_Tendency_Type**) (**OutputMatrix_Path**) (**OutputTree_Path**) (**FASTME**) [--nqd_method baseline|optimized] [--validate_nqd] [--benchmark_nqd] [--validate_pairs N]
 	* Central_Tendency: 0 --> Mean, 1 --> Median, 2 --> Mode, 3 --> Normal Distribution
 	* FastME: 0 --> FastME_BAL, 1 --> FastME_NJ
+	* NQD method:
+		* `baseline` (default): original per-path traversal
+		* `optimized`: LCA + prefix-sum query after per-tree preprocessing
+	* `--validate_nqd`: compares baseline vs optimized on sampled/all pairs and on the final distance matrix
+	* `--benchmark_nqd`: prints preprocessing/fill/total timing for both methods and speedup
