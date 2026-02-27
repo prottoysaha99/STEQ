@@ -2,26 +2,8 @@
 
 **STEQ** is a statistically consistent, quartet-based summary method for species tree inference. Given a collection of gene trees in Newick format, STEQ estimates pairwise inter-taxa distances based on quartet topologies across all gene trees, aggregates them using a configurable central tendency measure, and infers the species tree from the resulting distance matrix using a distance-based tree-building algorithm.
 
-STEQ operates under the **multispecies coalescent model** and is designed to be fast, lightweight, and easy to use — a typical run on 200 gene trees with 37 taxa completes in under 0.2 seconds.
-
 > **Platform:** Developed and tested on **Linux (Ubuntu/Debian)**.
 
----
-
-## Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/<user>/STEQ.git
-cd STEQ
-
-# Run on the included example dataset (37 taxa, 200 gene trees)
-./run_steq.sh -i all_gt_37.tre -o out_37.tre
-```
-
-That's it. The wrapper script handles compilation (if needed) and execution automatically.
-
----
 
 ## Prerequisites
 
@@ -45,6 +27,22 @@ sudo apt-get update && sudo apt-get install -y flex g++ libfl-dev
 flex --version
 g++ --version
 ```
+
+
+---
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/prottoysaha99/STEQ
+cd STEQ
+
+# Run on the included example dataset (37 taxa, 200 gene trees)
+./run_steq.sh -i all_gt_37.tre -o out_37.tre
+```
+
+That's it. The wrapper script handles compilation (if needed) and execution automatically.
 
 ---
 
