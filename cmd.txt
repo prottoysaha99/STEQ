@@ -1,0 +1,59 @@
+# ============================================================
+# STEQ — Example Commands
+# ============================================================
+
+# Project root
+cd /path/to/STEQ
+
+# ------------------------------------------------------------
+# A) Recommended: wrapper script (run_steq.sh)
+# ------------------------------------------------------------
+
+# 1) Default run (Mean + FastME_BAL)
+./run_steq.sh -i all_gt_37.tre -o out_37.tre
+
+# 2) Use Median distances
+./run_steq.sh -i all_gt_37.tre -o out_median_37.tre -c 1
+
+# 3) Use Mode distances with Neighbor Joining
+./run_steq.sh -i all_gt_37.tre -o out_mode_nj_37.tre -c 2 -f 1
+
+# 4) Trimmed Mean (Normal Distribution ±2σ) + Unweighted NJ
+./run_steq.sh -i all_gt_37.tre -o out_nd_unj_37.tre -c 3 -f 2
+
+# 5) Save the intermediate distance matrix
+./run_steq.sh -i all_gt_37.tre -o out_37.tre -m distance_matrix.txt
+
+# 6) Force rebuild of STEQ binary before running
+./run_steq.sh -i all_gt_37.tre -o out_37.tre --rebuild
+
+# 7) Show help / all options
+./run_steq.sh --help
+
+
+# ------------------------------------------------------------
+# B) Direct STEQ.out invocation (manual / advanced mode)
+# ------------------------------------------------------------
+
+# Build from source (if needed)
+cd Summarizer
+flex -o _steq_temp.c STEQ.l
+g++ _steq_temp.c -lfl -o STEQ.out
+rm -f _steq_temp.c
+
+# Ensure binaries are executable
+chmod +x ../Binaries/fastme-2.1.5-linux64
+chmod +x ../Binaries/BIONJ
+
+# Run STEQ.out directly (must be run from Summarizer/ directory)
+# Usage: ./STEQ.out <input> <central_tendency> <matrix_path> <out_tree> <fastme_type>
+
+# Mean + FastME_BAL
+./STEQ.out ../all_gt_37.tre 0 ../out_matrix.txt ../out_tree.tre 0
+
+# Median + FastME_NJ
+./STEQ.out ../all_gt_37.tre 1 ../out_matrix.txt ../out_tree.tre 1
+
+# Mode + FastME_UNJ
+./STEQ.out ../all_gt_37.tre 2 ../out_matrix.txt ../out_tree.tre 2
+
